@@ -8,20 +8,40 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 @app.route(route="http_trigger_video_split")
 def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
+    logging.info('Video split function triggered.')
 
-    # 1. Define paths and settings
-    input_video = "test.mp4"  # Video file must be in the same folder
-    output_prefix = "split_"
+    # Configuration
+    input_blob_name = "test.mp4"
+    input_container = "raw-video"
+    output_container = "splitted-videos"
     segment_time = "120"  # 2 minutes in seconds
+    
+    # Use forward slashes for Azure Functions (works on both Windows and Linux)
+    temp_dir = "/tmp"
+    input_video = f"{temp_dir}/{input_blob_name}"
+    output_prefix = f"{temp_dir}/split_"
 
-    # Path to ffmpeg.exe located in the current working directory
-    ffmpeg_path = os.path.join(os.getcwd(), "ffmpeg.exe")
-
-    # 2. Split video using FFmpeg
     try:
+        # 1. Initialize Blob Service Client
+        connection_string = os.environ["AzureWebJobsStorage"]
+        blob_service = BlobServiceClient.from_connection_string(connection_string)
+
+        # 2. Create /tmp directory if it doesn't exist
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # 3. Download video from blob storage
+        logging.info(f"Downloading {input_blob_name} from {input_container}")
+        blob_client = blob_service.get_blob_client(container=input_container, blob=input_blob_name)
+        
+        with open(input_video, "wb") as video_file:
+            download_stream = blob_client.download_blob()
+            video_file.write(download_stream.readall())
+        logging.info("Download completed successfully")
+
+        # 4. Split video using FFmpeg
+        logging.info("Starting video splitting process")
         subprocess.run([
-            ffmpeg_path,
+            "ffmpeg",
             "-i", input_video,
             "-c", "copy",
             "-map", "0",
@@ -30,35 +50,24 @@ def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
             "-reset_timestamps", "1",
             f"{output_prefix}%03d.mp4"
         ], check=True)
-        logging.info("Video successfully split into clips")
-    except subprocess.CalledProcessError as e:
-        error_msg = f"FFmpeg failed: {e}"
-        logging.error(error_msg)
-        return func.HttpResponse(error_msg, status_code=500)
-    except FileNotFoundError as e:
-        error_msg = f"FFmpeg not found. Expected at: {ffmpeg_path}"
-        logging.error(error_msg)
-        return func.HttpResponse(error_msg, status_code=500)
+        logging.info("Video split completed")
 
-    # 3. Upload to Azure Blob Storage
-    try:
-        connection_string = os.environ["AzureWebJobsStorage"]
-        container_name = "video-clips"
+        # 5. Upload split files to output container
+        output_container_client = blob_service.get_container_client(output_container)
+        
+        for file in os.listdir(temp_dir):
+            if file.startswith("split_") and file.endswith(".mp4"):
+                file_path = f"{temp_dir}/{file}"
+                with open(file_path, "rb") as data:
+                    output_container_client.upload_blob(name=file, data=data)
+                os.remove(file_path)
+                logging.info(f"Uploaded {file}")
 
-        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-        container_client = blob_service_client.get_container_client(container_name)
-
-        # Upload split files
-        for file in os.listdir():
-            if file.startswith(output_prefix) and file.endswith(".mp4"):
-                with open(file, "rb") as data:
-                    container_client.upload_blob(name=file, data=data)
-                os.remove(file)
-                logging.info(f"Uploaded {file} to blob storage")
-
-        return func.HttpResponse("Video successfully split and uploaded to blob storage", status_code=200)
+        # 6. Clean up
+        if os.path.exists(input_video):
+            os.remove(input_video)
+        return func.HttpResponse("Video processed successfully", status_code=200)
 
     except Exception as e:
-        error_msg = f"Blob upload failed: {e}"
-        logging.error(error_msg)
-        return func.HttpResponse(error_msg, status_code=500)
+        logging.error(f"Error: {str(e)}")
+        return func.HttpResponse(f"Error: {str(e)}", status_code=500)

@@ -1,0 +1,12 @@
+trafficvideo keys:
+
+(.venv) E:\AUEB\MSc\Semester B\Digital Infrastructure Technologies\Project\SmartCity-Traffic-Processing>az storage account keys list --resource-group video-clips --account-name trafficvideo --output table
+CreationTime                      KeyName    Permissions    Value
+--------------------------------  ---------  -------------  ----------------------------------------------------------------------------------------
+2025-05-14T10:40:12.779698+00:00  key1       FULL           m2lk91Z6dxt9Qb91w2BZLuIos/xwUAwlIZOVawK6WYdvz/ITx8SziUmQkLiBV9g/L9JbT/h3GkAF+ASts4Ju4g==
+2025-05-14T10:40:12.779698+00:00  key2       FULL           72MeOJNh9Fcp4I2Q2t4Y16xVFvLewIo53ot+lhQQGz2mc+VRUJJrtbWGGpKxHojliCBETpAOUHn1+AStBqF42Q==
+
+
+trafficvideo connection string:
+(.venv) E:\AUEB\MSc\Semester B\Digital Infrastructure Technologies\Project\SmartCity-Traffic-Processing>az storage account show-connection-string --resource-group video-clips --name trafficvideo --query connectionString --output tsv
+DefaultEndpointsProtocol=https;EndpointSuffix=core.windows.net;AccountName=trafficvideo;AccountKey=m2lk91Z6dxt9Qb91w2BZLuIos/xwUAwlIZOVawK6WYdvz/ITx8SziUmQkLiBV9g/L9JbT/h3GkAF+ASts4Ju4g==;BlobEndpoint=https://trafficvideo.blob.core.windows.net/;FileEndpoint=https://trafficvideo.file.core.windows.net/;QueueEndpoint=https://trafficvideo.queue.core.windows.net/;TableEndpoint=https://trafficvideo.table.core.windows.net/
