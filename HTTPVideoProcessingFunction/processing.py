@@ -8,7 +8,7 @@ from collections import deque
 # Constants
 DASHED_LINE_DISTANCE = 20  # meters between dashed lines
 MIN_SPEED_THRESHOLD = 5    # km/h - ignore vehicles moving slower than this
-MAX_SPEED_THRESHOLD = 130  # km/h - cap maximum reasonable speed to 130 km/h
+MAX_SPEED_THRESHOLD = 150  # km/h - cap maximum reasonable speed to 150 km/h
 PIXELS_PER_METER = 5       # Approximate pixel to meter conversion
 SPEED_SMOOTHING_WINDOW = 3 # Number of speed samples to average
 
