@@ -13,8 +13,8 @@ def process_video_clip(video_path: str) -> dict:
     
     # Load YOLO config and weights using absolute paths
     base_dir = os.path.dirname(__file__)
-    cfg_path = os.path.join(base_dir, "yolov3.cfg")
-    weights_path = os.path.join(base_dir, "yolov3.weights")
+    cfg_path = os.path.join(base_dir, "yolov3-tiny.cfg")
+    weights_path = os.path.join(base_dir, "yolov3-tiny.weights")
 
     if not os.path.exists(cfg_path):
         raise FileNotFoundError(f"YOLO config file not found: {cfg_path}")
