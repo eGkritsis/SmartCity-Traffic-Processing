@@ -151,9 +151,6 @@ def generate_stats(video_name: str, results: dict) -> dict:
     logging.info(f"Generated stats for {video_name}: {json.dumps(stats, cls=NumpyEncoder, indent=2)}")
     return stats
 
-# [Rest of your functions (calculate_lane_stats, calculate_time_stats, save_stats_to_blob, generate_text_report) remain the same]
-# Just make sure to use json.dumps(stats, cls=NumpyEncoder) when saving JSON
-
 def calculate_lane_stats(vehicles: list) -> dict:
     """Calculate per-lane statistics with validation"""
     lanes = {}
