@@ -6,6 +6,20 @@ from azure.storage.blob import BlobServiceClient
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
+def get_ffmpeg_path():
+    """Get the correct FFmpeg path for either local or Azure environment"""
+    # Try system FFmpeg first
+    try:
+        subprocess.run(["ffmpeg", "-version"], check=True, 
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return "ffmpeg"
+    except:
+        # Check for FFmpeg in the local 'bin' directory
+        local_ffmpeg = os.path.join(os.getcwd(), "bin", "ffmpeg")
+        if os.path.exists(local_ffmpeg):
+            return local_ffmpeg
+        raise Exception("FFmpeg not found. Please ensure FFmpeg is installed or included in your deployment")
+
 @app.route(route="http_trigger_video_split")
 def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Video split function triggered.')
@@ -38,10 +52,14 @@ def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
             video_file.write(download_stream.readall())
         logging.info("Download completed successfully")
 
-        # 4. Split video using FFmpeg
+        # 4. Get FFmpeg path and verify
+        ffmpeg_cmd = get_ffmpeg_path()
+        logging.info(f"Using FFmpeg at: {ffmpeg_cmd}")
+
+        # 5. Split video using FFmpeg
         logging.info("Starting video splitting process")
         subprocess.run([
-            "ffmpeg",
+            ffmpeg_cmd,
             "-i", input_video,
             "-c", "copy",
             "-map", "0",
@@ -52,7 +70,7 @@ def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
         ], check=True)
         logging.info("Video split completed")
 
-        # 5. Upload split files to output container
+        # 6. Upload split files to output container
         output_container_client = blob_service.get_container_client(output_container)
         
         for file in os.listdir(temp_dir):
@@ -63,11 +81,11 @@ def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
                 os.remove(file_path)
                 logging.info(f"Uploaded {file}")
 
-        # 6. Clean up
+        # 7. Clean up
         if os.path.exists(input_video):
             os.remove(input_video)
         return func.HttpResponse("Video processed successfully", status_code=200)
 
     except Exception as e:
-        logging.error(f"Error: {str(e)}")
+        logging.error(f"Error: {str(e)}", exc_info=True)
         return func.HttpResponse(f"Error: {str(e)}", status_code=500)
