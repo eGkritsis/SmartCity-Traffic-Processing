@@ -1,27 +1,25 @@
-import azure.functions as func
 import logging
+import azure.functions as func
 import subprocess
 import os
 from azure.storage.blob import BlobServiceClient
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
-
 def get_ffmpeg_path():
-    """Get the correct FFmpeg path for either local or Azure environment"""
-    # Try system FFmpeg first
+    """Locate FFmpeg binary with fallback paths"""
     try:
-        subprocess.run(["ffmpeg", "-version"], check=True, 
-                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(["ffmpeg", "-version"], check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return "ffmpeg"
     except:
-        # Check for FFmpeg in the local 'bin' directory
-        local_ffmpeg = os.path.join(os.getcwd(), "bin", "ffmpeg")
-        if os.path.exists(local_ffmpeg):
-            return local_ffmpeg
-        raise Exception("FFmpeg not found. Please ensure FFmpeg is installed or included in your deployment")
+        bin_path = os.path.join(os.getcwd(), "bin", "ffmpeg")
+        if os.path.exists(bin_path):
+            return bin_path
+        local_path = os.path.join(os.getcwd(), "ffmpeg")
+        if os.path.exists(local_path):
+            return local_path
+        raise Exception("FFmpeg not found in any expected locations")
 
-@app.route(route="http_trigger_video_split")
-def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
+def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Video split function triggered.')
 
     # Configuration
@@ -30,7 +28,6 @@ def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
     output_container = "splitted-videos"
     segment_time = "120"  # 2 minutes in seconds
     
-    # Use forward slashes for Azure Functions (works on both Windows and Linux)
     temp_dir = "/tmp"
     input_video = f"{temp_dir}/{input_blob_name}"
     output_prefix = f"{temp_dir}/split_"
@@ -84,6 +81,7 @@ def http_trigger_video_split(req: func.HttpRequest) -> func.HttpResponse:
         # 7. Clean up
         if os.path.exists(input_video):
             os.remove(input_video)
+
         return func.HttpResponse("Video processed successfully", status_code=200)
 
     except Exception as e:
