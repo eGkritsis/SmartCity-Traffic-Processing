@@ -111,8 +111,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         )
 
 def generate_stats(video_name: str, results: dict) -> dict:
-    """Generate comprehensive statistics with numpy type handling"""
-    # Convert numpy types to native Python types
+    """Generate comprehensive statistics with all vehicles (no filtering)"""
     def convert_numpy_types(obj):
         if isinstance(obj, np.generic):
             return obj.item()
@@ -121,82 +120,18 @@ def generate_stats(video_name: str, results: dict) -> dict:
         elif isinstance(obj, list):
             return [convert_numpy_types(v) for v in obj]
         return obj
-
-    # Filter out invalid speeds and empty records
-    valid_vehicles = [
-        convert_numpy_types(v) for v in results["vehicles"] 
-        if v.get("speed", 0) > 5 and v.get("speed", 0) < 300  # 5-300 km/h valid range
-    ]
-    
+ 
+    # Include ALL vehicles (no speed filtering)
+    all_vehicles = [convert_numpy_types(v) for v in results["vehicles"]]
     stats = {
         "video_name": video_name,
         "processing_time": datetime.utcnow().isoformat(),
-        "total_vehicles": len(valid_vehicles),
-        "speed_violations": {
-            "cars": sum(1 for v in valid_vehicles 
-                      if v.get("type") == "car" and v.get("speed", 0) > SPEED_LIMITS["car"]),
-            "trucks": sum(1 for v in valid_vehicles 
-                       if v.get("type") == "truck" and v.get("speed", 0) > SPEED_LIMITS["truck"])
-        },
-        "high_speed_alerts": [
-            v for v in valid_vehicles 
-            if v.get("speed", 0) > SPEED_LIMITS["emergency"]
-        ],
-        "lane_stats": calculate_lane_stats(valid_vehicles),
-        "time_stats": calculate_time_stats(valid_vehicles),
+        "total_vehicles": len(all_vehicles),
+        "vehicles": all_vehicles,  # <-- Now contains every vehicle with full data
         "video_metadata": convert_numpy_types(results.get("video_properties", {}))
     }
-    
-    # Log stats without numpy types
     logging.info(f"Generated stats for {video_name}: {json.dumps(stats, cls=NumpyEncoder, indent=2)}")
     return stats
-
-def calculate_lane_stats(vehicles: list) -> dict:
-    """Calculate per-lane statistics with validation"""
-    lanes = {}
-    for vehicle in vehicles:
-        lane = vehicle.get("lane", "unknown")
-        speed = vehicle.get("speed", 0)
-        
-        if lane not in lanes:
-            lanes[lane] = {"count": 0, "speeds": []}
-        
-        lanes[lane]["count"] += 1
-        lanes[lane]["speeds"].append(speed)
-    
-    # Calculate averages with validation
-    for lane in lanes:
-        if len(lanes[lane]["speeds"]) > 0:
-            lanes[lane]["avg_speed"] = sum(lanes[lane]["speeds"]) / len(lanes[lane]["speeds"])
-        else:
-            lanes[lane]["avg_speed"] = 0
-    
-    return lanes
-
-def calculate_time_stats(vehicles: list) -> dict:
-    """Calculate time-based statistics (5-minute intervals)"""
-    time_stats = {}
-    interval = 300  # 5 minutes in seconds
-    
-    for vehicle in vehicles:
-        timestamp = vehicle.get("timestamp", 0)
-        speed = vehicle.get("speed", 0)
-        time_slot = int(timestamp / interval) * interval
-        
-        if time_slot not in time_stats:
-            time_stats[time_slot] = {"count": 0, "speeds": []}
-        
-        time_stats[time_slot]["count"] += 1
-        time_stats[time_slot]["speeds"].append(speed)
-    
-    # Calculate averages with validation
-    for slot in time_stats:
-        if len(time_stats[slot]["speeds"]) > 0:
-            time_stats[slot]["avg_speed"] = sum(time_stats[slot]["speeds"]) / len(time_stats[slot]["speeds"])
-        else:
-            time_stats[slot]["avg_speed"] = 0
-    
-    return time_stats
 
 def save_stats_to_blob(stats: dict, original_blob_name: str):
     """Save statistics to output container with error handling"""
@@ -216,54 +151,8 @@ def save_stats_to_blob(stats: dict, original_blob_name: str):
         json_client = container_client.get_blob_client(json_blob_name)
         json_client.upload_blob(json.dumps(stats, indent=2), overwrite=True)
         
-        # Save as TXT
-        txt_blob_name = f"{base_name}_stats.txt"
-        txt_content = generate_text_report(stats)
-        txt_client = container_client.get_blob_client(txt_blob_name)
-        txt_client.upload_blob(txt_content, overwrite=True)
-        
         logging.info(f"Saved stats for {original_blob_name} to {OUTPUT_CONTAINER}")
 
     except Exception as e:
         logging.error(f"Failed to save stats for {original_blob_name}: {str(e)}")
         raise
-
-def generate_text_report(stats: dict) -> str:
-    """Generate human-readable report"""
-    report = [
-        "TRAFFIC ANALYSIS REPORT",
-        "=======================",
-        f"Video: {stats['video_name']}",
-        f"Processing time: {stats['processing_time']}",
-        "",
-        f"Total valid vehicles detected: {stats['total_vehicles']}",
-        "",
-        "SPEED VIOLATIONS:",
-        f"- Cars exceeding {SPEED_LIMITS['car']} km/h: {stats['speed_violations']['cars']}",
-        f"- Trucks exceeding {SPEED_LIMITS['truck']} km/h: {stats['speed_violations']['trucks']}",
-        "",
-        "HIGH SPEED ALERTS (>130 km/h):"
-    ]
-    
-    for alert in stats["high_speed_alerts"]:
-        report.append(
-            f"- {alert.get('type', 'vehicle').title()} at {alert.get('speed', 0):.1f} km/h "
-            f"(Lane: {alert.get('lane', 'unknown')}, Time: {alert.get('timestamp', 0):.1f}s)"
-        )
-    
-    report.extend(["", "LANE STATISTICS:"])
-    for lane, data in stats["lane_stats"].items():
-        report.append(
-            f"- Lane {lane}: {data['count']} vehicles, "
-            f"Avg speed: {data['avg_speed']:.1f} km/h"
-        )
-    
-    report.extend(["", "TIME-BASED STATISTICS (5-minute intervals):"])
-    for time_slot, data in stats["time_stats"].items():
-        minutes = int(time_slot / 60)
-        report.append(
-            f"- {minutes}-{minutes+5} min: {data['count']} vehicles, "
-            f"Avg speed: {data['avg_speed']:.1f} km/h"
-        )
-    
-    return "\n".join(report)
