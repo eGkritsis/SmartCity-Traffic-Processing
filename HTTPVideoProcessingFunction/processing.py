@@ -68,6 +68,13 @@ class VehicleTracker:
                                 vehicle['speed_history'].pop(0)
                             # Smoothed speed
                             vehicle['speed'] = sum(vehicle['speed_history']) / len(vehicle['speed_history'])
+
+                            # REAL TIME ALERTS PRINTED TO THE LOG CONSOLE
+                            if vehicle['speed'] > 130:
+                                logging.warning(
+                                    f"[ALERT] Vehicle ID {matched_id} exceeded 130 km/h: "
+                                    f"{vehicle['speed']:.1f} km/h at time {frame_time:.2f}s, position={center_x},{center_y}"
+                                )
                 
                 vehicle['last_position'] = (center_x, center_y, frame_time)
                 vehicle['positions'].append((center_x, center_y, frame_time))
