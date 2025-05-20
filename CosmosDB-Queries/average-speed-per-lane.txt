@@ -1,0 +1,97 @@
+***Query***
+
+SELECT 
+    c.video_name,
+    c.lane_stats.inbound.avg_speed AS avg_inbound_speed,
+    c.lane_stats.outbound.avg_speed AS avg_outbound_speed
+FROM c
+
+***Results***
+
+[
+    {
+        "video_name": "split_000.mp4",
+        "avg_inbound_speed": 67.77119160385057,
+        "avg_outbound_speed": 74.09765960954437
+    },
+    {
+        "video_name": "split_001.mp4",
+        "avg_inbound_speed": 56.80115860312553,
+        "avg_outbound_speed": 76.76241840685775
+    },
+    {
+        "video_name": "split_002.mp4",
+        "avg_inbound_speed": 98.92761973973977,
+        "avg_outbound_speed": 98.57859950059273
+    },
+    {
+        "video_name": "split_003.mp4",
+        "avg_inbound_speed": 87.33074554785067,
+        "avg_outbound_speed": 86.41025362010498
+    },
+    {
+        "video_name": "split_004.mp4",
+        "avg_inbound_speed": 86.46968685995878,
+        "avg_outbound_speed": 88.7635793931494
+    },
+    {
+        "video_name": "split_005.mp4",
+        "avg_inbound_speed": 96.70068104667158,
+        "avg_outbound_speed": 99.50238772121345
+    },
+    {
+        "video_name": "split_006.mp4",
+        "avg_inbound_speed": 95.64980577587772,
+        "avg_outbound_speed": 98.05190924513671
+    },
+    {
+        "video_name": "split_007.mp4",
+        "avg_inbound_speed": 88.42190351848542,
+        "avg_outbound_speed": 93.16990581042502
+    },
+    {
+        "video_name": "split_008.mp4",
+        "avg_inbound_speed": 92.40414261804472,
+        "avg_outbound_speed": 91.76519519114713
+    },
+    {
+        "video_name": "split_009.mp4",
+        "avg_inbound_speed": 88.25675158145027,
+        "avg_outbound_speed": 86.57010830749566
+    },
+    {
+        "video_name": "split_010.mp4",
+        "avg_inbound_speed": 94.49160449059252,
+        "avg_outbound_speed": 96.05807833656665
+    },
+    {
+        "video_name": "split_011.mp4",
+        "avg_inbound_speed": 89.2713355722316,
+        "avg_outbound_speed": 89.4001216778625
+    },
+    {
+        "video_name": "split_012.mp4",
+        "avg_inbound_speed": 80.17267312095896,
+        "avg_outbound_speed": 87.34300570773323
+    },
+    {
+        "video_name": "split_013.mp4",
+        "avg_inbound_speed": 88.93380281733573,
+        "avg_outbound_speed": 90.99070731622194
+    },
+    {
+        "video_name": "split_014.mp4",
+        "avg_inbound_speed": 82.84123240670547,
+        "avg_outbound_speed": 83.8722941719124
+    },
+    {
+        "video_name": "split_015.mp4",
+        "avg_inbound_speed": 90.8714046513974,
+        "avg_outbound_speed": 93.01987252420547
+    },
+    {
+        "video_name": "split_016.mp4",
+        "avg_inbound_speed": 85.53482135707782,
+        "avg_outbound_speed": 85.34479381001071
+    }
+]
