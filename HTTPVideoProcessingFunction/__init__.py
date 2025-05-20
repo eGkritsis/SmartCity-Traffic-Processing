@@ -111,7 +111,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         )
 
 def generate_stats(video_name: str, results: dict) -> dict:
-    """Generate comprehensive statistics with all vehicles (no filtering)"""
+    """Generate summary stats: only cars and trucks, no duplicates per vehicle ID, keep highest speed"""
+    
     def convert_numpy_types(obj):
         if isinstance(obj, np.generic):
             return obj.item()
@@ -120,18 +121,36 @@ def generate_stats(video_name: str, results: dict) -> dict:
         elif isinstance(obj, list):
             return [convert_numpy_types(v) for v in obj]
         return obj
- 
-    # Include ALL vehicles (no speed filtering)
-    all_vehicles = [convert_numpy_types(v) for v in results["vehicles"]]
+
+    # Map from vehicle ID -> vehicle with highest speed
+    vehicle_map = {}
+
+    for vehicle in results["vehicles"]:
+        vehicle_id = vehicle.get("id")
+        vehicle_type = vehicle.get("type")
+        
+        if vehicle_type not in ["car", "truck"]:
+            continue  # Skip other types
+
+        # If not seen before OR this one is faster → keep it
+        existing = vehicle_map.get(vehicle_id)
+        if not existing or vehicle["speed"] > existing["speed"]:
+            vehicle_map[vehicle_id] = vehicle
+
+    # Convert to final deduplicated list
+    unique_vehicles = [convert_numpy_types(v) for v in vehicle_map.values()]
+
     stats = {
         "video_name": video_name,
         "processing_time": datetime.utcnow().isoformat(),
-        "total_vehicles": len(all_vehicles),
-        "vehicles": all_vehicles,  # <-- Now contains every vehicle with full data
+        "total_vehicles": len(unique_vehicles),
+        "vehicles": unique_vehicles,
         "video_metadata": convert_numpy_types(results.get("video_properties", {}))
     }
-    logging.info(f"Generated stats for {video_name}: {json.dumps(stats, cls=NumpyEncoder, indent=2)}")
+
+    logging.info(f"Generated deduplicated stats for {video_name}: {json.dumps(stats, cls=NumpyEncoder, indent=2)}")
     return stats
+
 
 def save_stats_to_blob(stats: dict, original_blob_name: str):
     """Save statistics to output container with error handling"""

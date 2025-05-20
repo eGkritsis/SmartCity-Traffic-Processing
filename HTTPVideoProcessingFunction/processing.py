@@ -3,132 +3,146 @@ import numpy as np
 from datetime import datetime
 import logging
 import os
-from collections import deque
+from collections import defaultdict
 
-# Constants
-DASHED_LINE_DISTANCE = 20  # meters between dashed lines
-MIN_SPEED_THRESHOLD = 5    # km/h - ignore vehicles moving slower than this
-MAX_SPEED_THRESHOLD = 150  # km/h - cap maximum reasonable speed to 150 km/h
-PIXELS_PER_METER = 5       # Approximate pixel to meter conversion
-SPEED_SMOOTHING_WINDOW = 3 # Number of speed samples to average
+# ---------- Logging Configuration ----------
+logger = logging.getLogger(__name__)
+if not logger.hasHandlers():  # Prevent duplicate handlers
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
+    file_handler = logging.FileHandler('traffic_processing.log')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+# ---------- Constants ----------
+DASHED_LINE_DISTANCE = 20          # meters between dashed lines
+MIN_SPEED_THRESHOLD = 5            # km/h - minimum speed to consider
+MAX_SPEED_THRESHOLD = 200         # km/h - maximum plausible speed
+PIXELS_PER_METER = 5               # pixel to meter conversion factor
+SPEED_SMOOTHING_WINDOW = 3         # number of frames to average speed over
+ALERT_COOLDOWN_SECONDS = 5         # minimum seconds between alerts for same vehicle
+
+# ---------- Vehicle Tracker Class ----------
 class VehicleTracker:
     def __init__(self):
-        self.tracked_vehicles = {}
-        self.next_id = 1
-        self.frame_count = 0
-        
+        """Initialize vehicle tracker with empty structures"""
+        self.tracked_vehicles = {}  # Active vehicles being tracked
+        self.available_ids = set()   # Reusable vehicle IDs
+        self.next_id = 1             # Next available new ID
+        self.alerted_vehicles = {}   # Track last alert time per vehicle
+        self.max_speeds = {}         # Track maximum speed per vehicle
+
     def update(self, detections, frame_time, frame_height):
+        """
+        Update vehicle tracking with new detections
+        Args:
+            detections: List of (x,y,w,h,confidence,class_id)
+            frame_time: Current video time in seconds
+            frame_height: Video frame height for position scaling
+        Returns:
+            List of vehicle results with max speeds
+        """
         updated_vehicles = {}
         results = []
-        
-        # Mark all tracked vehicles as unmatched initially
+
+        # Mark all existing vehicles as unmatched at start of update
         for vehicle_id, vehicle in self.tracked_vehicles.items():
             vehicle['matched'] = False
-        
-        for detection in detections:
-            x, y, w, h, confidence, class_id = detection
-            center_x = x + w // 2
-            center_y = y + h // 2
-            
-            matched_id = None
-            min_distance = float('inf')
-            
-            for vehicle_id, vehicle in self.tracked_vehicles.items():
-                if vehicle['matched']:
-                    continue
-                    
-                last_x, last_y, last_time = vehicle['last_position']
-                distance = np.sqrt((center_x - last_x)**2 + (center_y - last_y)**2)
-                time_elapsed = frame_time - last_time
-                
-                if time_elapsed < 1.0 and distance < 100:  # 1 sec max, 100 pixels max
-                    if distance < min_distance:
-                        min_distance = distance
-                        matched_id = vehicle_id
-            
-            if matched_id is not None:
-                vehicle = self.tracked_vehicles[matched_id]
-                vehicle['matched'] = True
-                
-                if len(vehicle['positions']) > 0:
-                    prev_x, prev_y, prev_time = vehicle['positions'][-1]
-                    pixels_moved = np.sqrt((center_x - prev_x)**2 + (center_y - prev_y)**2)
-                    time_elapsed = frame_time - prev_time
-                    
-                    if time_elapsed > 0:
-                        meters_moved = pixels_moved / PIXELS_PER_METER
-                        speed_mps = meters_moved / time_elapsed
-                        speed_kmh = speed_mps * 3.6
-                        
-                        if MIN_SPEED_THRESHOLD < speed_kmh < MAX_SPEED_THRESHOLD:
-                            vehicle['speed_history'].append(speed_kmh)
-                            # Keep only last N speeds for smoothing
-                            if len(vehicle['speed_history']) > SPEED_SMOOTHING_WINDOW:
-                                vehicle['speed_history'].pop(0)
-                            # Smoothed speed
-                            vehicle['speed'] = sum(vehicle['speed_history']) / len(vehicle['speed_history'])
 
-                            # REAL TIME ALERTS PRINTED TO THE LOG CONSOLE
-                            if vehicle['speed'] > 130:
-                                logging.warning(
-                                    f"[ALERT] Vehicle ID {matched_id} exceeded 130 km/h: "
-                                    f"{vehicle['speed']:.1f} km/h at time {frame_time:.2f}s, position={center_x},{center_y}"
+        for x, y, w, h, conf, class_id in detections:
+            cx, cy = x + w // 2, y + h // 2
+
+            matched_id = None
+            min_dist = float('inf')
+            for vid, v in self.tracked_vehicles.items():
+                if v['matched']:
+                    continue
+                lx, ly, lt = v['last_position']
+                dist = np.hypot(cx - lx, cy - ly)
+                if (frame_time - lt < 1.0) and dist < 100 and dist < min_dist:
+                    matched_id = vid
+                    min_dist = dist
+
+            if matched_id is not None:
+                v = self.tracked_vehicles[matched_id]
+                v['matched'] = True
+                if v['positions']:
+                    px, py, pt = v['positions'][-1]
+                    pixels = np.hypot(cx - px, cy - py)
+                    t_elapsed = frame_time - pt
+                    if t_elapsed > 0:
+                        meters = pixels / PIXELS_PER_METER
+                        speed_kmh = (meters / t_elapsed) * 3.6
+                        if MIN_SPEED_THRESHOLD < speed_kmh < MAX_SPEED_THRESHOLD:
+                            v['speed_history'].append(speed_kmh)
+                            if len(v['speed_history']) > SPEED_SMOOTHING_WINDOW:
+                                v['speed_history'].pop(0)
+                            v['speed'] = sum(v['speed_history']) / len(v['speed_history'])
+
+                            if v['speed'] > 130 and not v.get('alerted', False):
+                                logger.warning(
+                                    f"[SPEED ALERT] Vehicle ID {matched_id} ({v['type']}) exceeded 130 km/h: "
+                                    f"{v['speed']:.1f} km/h at time {frame_time:.2f}s, position=({cx},{cy})"
                                 )
-                
-                vehicle['last_position'] = (center_x, center_y, frame_time)
-                vehicle['positions'].append((center_x, center_y, frame_time))
-                updated_vehicles[matched_id] = vehicle
-                
-                # Only report vehicles with enough positions
-                if 'speed' in vehicle and len(vehicle['positions']) >= 5:
-                    # Determine lane by dominant movement vector
-                    dx = vehicle['positions'][-1][0] - vehicle['positions'][0][0]
-                    dy = vehicle['positions'][-1][1] - vehicle['positions'][0][1]
-                    if abs(dx) > abs(dy):
-                        lane = 'inbound' if dx < 0 else 'outbound'
-                    else:
-                        lane = 'inbound' if dy < 0 else 'outbound'
-                    
+                                v['alerted'] = True  # Mark alerted
+
+                v['last_position'] = (cx, cy, frame_time)
+                v['positions'].append((cx, cy, frame_time))
+                updated_vehicles[matched_id] = v
+
+                if 'speed' in v and len(v['positions']) >= 3:
+                    dx = v['positions'][-1][0] - v['positions'][0][0]
+                    dy = v['positions'][-1][1] - v['positions'][0][1]
+                    direction = (
+                        'inbound'
+                        if (abs(dx) > abs(dy) and dx < 0) or (abs(dy) >= abs(dx) and dy < 0)
+                        else 'outbound'
+                    )
                     results.append({
                         'id': matched_id,
-                        'type': 'car' if class_id in [2, 3] else 'truck',
-                        'lane': lane,
-                        'speed': vehicle['speed'],
+                        'type': v['type'],
+                        'direction': direction,
+                        'speed': v['speed'],
                         'timestamp': frame_time,
-                        'position': (center_x, center_y),
-                        'confidence': confidence
+                        'position': (cx, cy),
+                        'confidence': conf
                     })
+
             else:
-                # New vehicle
-                vehicle_id = self.next_id
+                # Always assign a new unique ID without reuse
+                new_id = self.next_id
                 self.next_id += 1
-                
-                updated_vehicles[vehicle_id] = {
-                    'id': vehicle_id,
-                    'type': 'car' if class_id in [2, 3] else 'truck',
-                    'last_position': (center_x, center_y, frame_time),
-                    'positions': [(center_x, center_y, frame_time)],
+                updated_vehicles[new_id] = {
+                    'id': new_id,
+                    'type': 'car' if class_id == 2 else 'truck',
+                    'last_position': (cx, cy, frame_time),
+                    'positions': [(cx, cy, frame_time)],
                     'speed_history': [],
-                    'first_seen': frame_time,
                     'matched': True,
-                    'confidence': confidence
+                    'alerted': False,
+                    'confidence': conf
                 }
-        
-        # Remove vehicles not seen for more than 2 seconds
-        for vehicle_id, vehicle in self.tracked_vehicles.items():
-            if not vehicle['matched']:
-                last_seen = frame_time - vehicle['last_position'][2]
-                if last_seen < 2.0:
-                    updated_vehicles[vehicle_id] = vehicle
-        
+
+        # Keep unmatched vehicles only if updated recently (3 seconds)
+        for vid, v in self.tracked_vehicles.items():
+            if not v['matched'] and frame_time - v['last_position'][2] < 3.0:
+                updated_vehicles[vid] = v
+
         self.tracked_vehicles = updated_vehicles
-        self.frame_count += 1
         return results
 
+
+# ---------- Video Processing Function ----------
 def process_video_clip(video_path: str) -> dict:
-    logging.info(f"Starting enhanced video processing: {video_path}")
-    
+    """Process a video clip and return vehicle tracking results"""
+    logger.info(f"Starting video processing: {video_path}")
+
+    # Load YOLOv3-tiny model
     base_dir = os.path.dirname(__file__)
     net = cv2.dnn.readNet(
         os.path.join(base_dir, "yolov3-tiny.weights"),
@@ -136,22 +150,22 @@ def process_video_clip(video_path: str) -> dict:
     )
     layer_names = net.getLayerNames()
     output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers().flatten()]
-    
+
+    # Open video file
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"Could not open video: {video_path}")
 
+    # Get video properties
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     duration = total_frames / fps
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    
-    logging.info(
-        f"Video properties - {width}x{height} @ {fps:.1f}fps, "
-        f"Duration: {duration:.1f}s, Frames: {total_frames}"
-    )
 
+    logger.info(f"Video properties - {width}x{height} @ {fps:.1f}fps, Duration: {duration:.1f}s, Frames: {total_frames}")
+
+    # Initialize tracker and results structure
     tracker = VehicleTracker()
     results = {
         "vehicles": [],
@@ -164,6 +178,7 @@ def process_video_clip(video_path: str) -> dict:
         }
     }
 
+    # Process each frame
     frame_count = 0
     while cap.isOpened():
         ret, frame = cap.read()
@@ -173,45 +188,49 @@ def process_video_clip(video_path: str) -> dict:
         frame_count += 1
         current_time = frame_count / fps
 
-        # Vehicle detection
+        # Detect vehicles using YOLO
         blob = cv2.dnn.blobFromImage(frame, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
         net.setInput(blob)
         outs = net.forward(output_layers)
 
+        # Process detections (only cars and trucks)
         detections = []
         for out in outs:
             for detection in out:
                 scores = detection[5:]
                 class_id = np.argmax(scores)
                 confidence = scores[class_id]
-                
-                if confidence > 0.8 and class_id in [2, 3, 5, 7]:
-                    center_x = int(detection[0] * width)
-                    center_y = int(detection[1] * height)
+
+                if confidence > 0.6 and class_id in [2, 7]:  # Only cars (2) and trucks (7)
+                    cx = int(detection[0] * width)
+                    cy = int(detection[1] * height)
                     w = int(detection[2] * width)
                     h = int(detection[3] * height)
-                    x = int(center_x - w / 2)
-                    y = int(center_y - h / 2)
-                    
+                    x = int(cx - w / 2)
+                    y = int(cy - h / 2)
                     detections.append((x, y, w, h, confidence, class_id))
 
+        # Update tracker with new detections
         tracked_vehicles = tracker.update(detections, current_time, height)
         results["vehicles"].extend(tracked_vehicles)
 
+        # Log progress every 10 seconds
         if frame_count % int(fps * 10) == 0:
-            logging.info(
-                f"Frame {frame_count}/{total_frames} ({current_time:.1f}s) - "
-                f"Tracking {len(tracker.tracked_vehicles)} vehicles"
-            )
+            logger.info(f"Progress: {frame_count}/{total_frames} frames ({current_time:.1f}/{duration:.1f}s)")
 
+    # Finalize results
     cap.release()
-    
     results["processing_end"] = datetime.utcnow().isoformat()
-    processing_time = (datetime.utcnow() - datetime.fromisoformat(results["processing_start"])).total_seconds()
+    proc_time = (datetime.utcnow() - datetime.fromisoformat(results["processing_start"])).total_seconds()
     
-    logging.info(
-        f"Processing completed. Detected {len(results['vehicles'])} vehicle tracks "
-        f"in {processing_time:.1f} seconds ({processing_time/duration:.1f}x realtime)"
-    )
+    # Filter to only keep max speed per vehicle
+    unique_vehicles = {}
+    for vehicle in results["vehicles"]:
+        vid = vehicle['id']
+        if vid not in unique_vehicles or vehicle['speed'] > unique_vehicles[vid]['speed']:
+            unique_vehicles[vid] = vehicle
     
+    results["vehicles"] = list(unique_vehicles.values())
+    
+    logger.info(f"Processing completed. {len(results['vehicles'])} unique vehicles in {proc_time:.1f}s")
     return results
