@@ -47,15 +47,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
                 # Prepare Cosmos DB document
                 document = {
-                    "id": json_data["video_name"].replace(".mp4", ""),  # video_name as ID
-                    "video_name": json_data["video_name"],               # original field
-                    "partitionKey": json_data["video_name"],             # Same as id for single partition
+                    "id": json_data["video_name"].replace(".mp4", ""),
+                    "video_name": json_data["video_name"],
+                    "partitionKey": json_data["video_name"],
                     "processing_time": json_data["processing_time"],
                     "total_vehicles": json_data["total_vehicles"],
-                    "speed_violations": json_data["speed_violations"],
-                    "high_speed_alerts": json_data["high_speed_alerts"],
-                    "lane_stats": json_data["lane_stats"],
-                    "time_stats": json_data["time_stats"],
+                    "vehicles": json_data["vehicles"],  # List of vehicle dicts
                     "video_metadata": json_data["video_metadata"]
                 }
 
