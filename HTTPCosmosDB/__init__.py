@@ -45,6 +45,10 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 blob_client = container_client.get_blob_client(blob)
                 json_data = json.loads(blob_client.download_blob().readall())
 
+                for vehicle in json_data["vehicles"]:
+                    # Create a unique ID for each vehicle by combining video name with vehicle ID
+                    vehicle["id"] = f"{blob.name.replace("_stats.json", "")}_{vehicle['id']}"
+
                 # Prepare Cosmos DB document
                 document = {
                     "id": json_data["video_name"].replace(".mp4", ""),
