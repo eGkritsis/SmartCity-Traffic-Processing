@@ -46,8 +46,19 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 json_data = json.loads(blob_client.download_blob().readall())
 
                 for vehicle in json_data["vehicles"]:
-                    # Create a unique ID for each vehicle by combining video name with vehicle ID
-                    vehicle["id"] = f"{blob.name.replace("_stats.json", "")}_{vehicle['id']}"
+                    # Extract numeric clip number from filename (e.g., "split_000_stats.json" → 0)
+                    clip_number = blob.name.replace("split_", "").replace("_stats.json", "")
+
+                    # Unique vehicle ID
+                    vehicle["id"] = f"{clip_number}_{vehicle['id']}"
+
+                    # Ensure timestamp is a float
+                    vehicle["timestamp"] = float(vehicle["timestamp"])
+
+                    # Add clip number separately
+                    vehicle["clip_number"] = clip_number
+
+
 
                 # Prepare Cosmos DB document
                 document = {
