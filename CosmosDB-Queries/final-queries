@@ -1,0 +1,44 @@
+-- Query 1
+SELECT vehicle.id, vehicle.speed
+FROM doc
+JOIN vehicle IN doc.vehicles
+WHERE vehicle.type = 'car'
+
+-- Query 2
+SELECT vehicle.direction, COUNT(1) AS vehicle_count
+FROM doc
+JOIN vehicle IN doc.vehicles
+GROUP BY vehicle.direction
+
+-- Query 3
+SELECT VALUE COUNT(1)
+FROM doc
+JOIN vehicle IN doc.vehicles
+WHERE (vehicle.type = 'car' AND vehicle.speed > 90)
+   OR (vehicle.type = 'truck' AND vehicle.speed > 80)
+-- returns 5420, total 5764
+
+-- Query 4
+SELECT 
+    vehicle.direction,
+    FLOOR(vehicle.timestamp / 300) AS interval_5min,
+    COUNT(1) AS vehicle_count
+FROM doc
+JOIN vehicle IN doc.vehicles
+GROUP BY 
+    vehicle.direction,
+    FLOOR(vehicle.timestamp / 300)
+
+-- Query 5 
+SELECT
+    v.direction,
+    FLOOR(v.timestamp / 300) AS interval_5min,
+    AVG(v.speed) AS avg_speed
+FROM c
+JOIN v IN c.vehicles
+WHERE IS_DEFINED(v.speed) AND IS_DEFINED(v.direction) AND IS_DEFINED(v.timestamp)
+GROUP BY
+    v.direction,
+    FLOOR(v.timestamp / 300)
+-- ORDER BY
+--     interval_5min, v.direction
