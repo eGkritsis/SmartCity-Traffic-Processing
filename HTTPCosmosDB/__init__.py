@@ -32,6 +32,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
         processed_count = 0
         error_count = 0
+        time_offset = 0.0 
         blobs = container_client.list_blobs()
 
         for blob in blobs:
@@ -53,12 +54,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                     vehicle["id"] = f"{clip_number}_{vehicle['id']}"
 
                     # Ensure timestamp is a float
-                    vehicle["timestamp"] = float(vehicle["timestamp"])
-
-                    # Add clip number separately
-                    vehicle["clip_number"] = clip_number
-
-
+                    vehicle["timestamp"] = float(vehicle["timestamp"]) + time_offset
 
                 # Prepare Cosmos DB document
                 document = {
@@ -75,6 +71,9 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 container.upsert_item(document)
                 processed_count += 1
                 logger.info(f"Successfully processed {blob.name}")
+
+                # Update time offset for the next split
+                time_offset += json_data.get("video_metadata", {}).get("duration", 0.0)
 
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON in {blob.name}: {str(e)}")
