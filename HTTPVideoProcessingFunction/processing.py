@@ -22,10 +22,12 @@ if not logger.hasHandlers():  # Prevent duplicate handlers
 # ---------- Constants ----------
 DASHED_LINE_DISTANCE = 20          # meters between dashed lines
 MIN_SPEED_THRESHOLD = 5            # km/h - minimum speed to consider
-MAX_SPEED_THRESHOLD = 200         # km/h - maximum plausible speed
-PIXELS_PER_METER = 5               # pixel to meter conversion factor
+MAX_SPEED_THRESHOLD = 200          # km/h - maximum plausible speed
+PIXELS_DASHED_LINE = 245
+# pixel to meter conversion factor
+PIXELS_PER_METER = PIXELS_DASHED_LINE / DASHED_LINE_DISTANCE 
 SPEED_SMOOTHING_WINDOW = 3         # number of frames to average speed over
-ALERT_COOLDOWN_SECONDS = 5         # minimum seconds between alerts for same vehicle
+CONFIDENCE = 0.6                  # confidence threshold for car/truck detection
 
 # ---------- Vehicle Tracker Class ----------
 class VehicleTracker:
@@ -201,7 +203,7 @@ def process_video_clip(video_path: str) -> dict:
                 class_id = np.argmax(scores)
                 confidence = scores[class_id]
 
-                if confidence > 0.6 and class_id in [2, 7]:  # Only cars (2) and trucks (7)
+                if confidence > CONFIDENCE and class_id in [2, 7]:  # Only cars (2) and trucks (7)
                     cx = int(detection[0] * width)
                     cy = int(detection[1] * height)
                     w = int(detection[2] * width)
