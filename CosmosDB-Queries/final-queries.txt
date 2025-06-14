@@ -16,7 +16,7 @@ FROM doc
 JOIN vehicle IN doc.vehicles
 WHERE (vehicle.type = 'car' AND vehicle.speed > 90)
    OR (vehicle.type = 'truck' AND vehicle.speed > 80)
--- returns 5420, total 5764
+
 
 -- Query 4
 SELECT 
@@ -40,5 +40,3 @@ WHERE IS_DEFINED(v.speed) AND IS_DEFINED(v.direction) AND IS_DEFINED(v.timestamp
 GROUP BY
     v.direction,
     FLOOR(v.timestamp / 300)
--- ORDER BY
---     interval_5min, v.direction
